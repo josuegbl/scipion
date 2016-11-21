@@ -26,7 +26,7 @@
 
 
 
-from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam, LEVEL_ADVANCED)
+from pyworkflow.protocol.params import (PointerParam, StringParam, BooleanParam,  FloatParam, LEVEL_ADVANCED)
 from pyworkflow.em.protocol.protocol_3d import ProtRefine3D
 from convert import readSetOfVolumes
 from shutil import copyfile
@@ -71,10 +71,15 @@ class XmippProtMonoRes(ProtRefine3D):
                       label="Mask", 
                       help='The mask determines the those points where the macromolecle is')
 
+
+        form.addParam('symmetry', StringParam, default='c1', 
+                      label="Symmetry",  
+                      help='Symmetry group. By default = c1')
+        
         line = form.addLine('Resolution Range (A)', 
                       help="If the user knows the range of resolutions or only a"
                       " range of frequency needs to be analysed", expertLevel=LEVEL_ADVANCED)
-	
+
         line.addParam('minRes', FloatParam, default=1, label='Min')
         line.addParam('maxRes', FloatParam, default=100, label='Max')
         
@@ -112,8 +117,21 @@ class XmippProtMonoRes(ProtRefine3D):
         deps = []
                  
         fnVol = self._getExtraPath('input_volume.vol')
+        
+        if self.symmetry.get() not in ['c1', 'C1']:
+            self._insertFunctionStep('symmetrizeStep', 
+                                     self._getExtraPath('input_mask.vol'),
+                                     prerequisites=[convertId])
 
         MS = self._insertFunctionStep('resolutionMonogenicSignalStep', fnVol, prerequisites=[convertId])
+        
+        if self.symmetry.get() not in ['c1', 'C1']:
+            self._insertFunctionStep('symmetrizeStep',
+                                     self._getExtraPath('MGresolution.vol')
+                                     , prerequisites=[convertId])
+            self._insertFunctionStep('symmetrizeStep',
+                                     self._getExtraPath('MG_Chimera_resolution.vol')
+                                     , prerequisites=[convertId])
        
         self._insertFunctionStep('createOutputStep', prerequisites=[MS])
         
@@ -135,6 +153,7 @@ class XmippProtMonoRes(ProtRefine3D):
         vol_ = self.Mask.get().getFileName()
         copyfile(vol_,path_vol)
    
+   
     def resolutionMonogenicSignalStep(self, fnVol):
 
         if self.halfVolumens.get() is False:
@@ -143,8 +162,10 @@ class XmippProtMonoRes(ProtRefine3D):
         else:
             params =  ' --vol %s' % self.inputVolume.get().getFileName()
             params +=  ' --vol2 %s' % self.inputVolume2.get().getFileName()
-	    if self.provideMaskInHalves.get() is True:
-		params +=  ' --mask %s' % self.Mask.get().getFileName()
+            
+        if self.provideMaskInHalves.get() is True:
+            params +=  ' --mask %s' % self.Mask.get().getFileName()
+        
         params +=  ' -o %s' % self._getExtraPath('MGresolution.vol')
         params +=  ' --sampling_rate %f' % self.inputVolume.get().getSamplingRate()
         params +=  ' --number_frequencies %f' % 50
@@ -160,18 +181,24 @@ class XmippProtMonoRes(ProtRefine3D):
         else:
             params +=  ' --filtered_volume %s' %''
 
-#         if self.premask.get() is True:
-#             params +=  ' --circular_mask %f' % self.circularRadius.get()
         if self.trimming.get() is True:
             params +=  ' --trimmed %f' % self.kValue.get()
         else:
             params +=  ' --trimmed %f' % 0
             
-            
- 
         self.runJob('xmipp_resolution_monogenic_signal', params)
         
         
+    def symmetrizeStep(self, fnVol2Sym):
+        
+        params =  ' -i %s' % fnVol2Sym
+        params +=  ' --sym %s' % self.symmetry.get()
+#        params +=  ' -o %s' % self._getExtraPath('MGresolution2.vol')
+
+        self.runJob('xmipp_transform_symmetrize', params)
+
+
+                
     def createChimeraScript(self):
         fnRoot = "extra/"
         scriptFile = self._getPath('Chimera_resolution.cmd') 
@@ -197,7 +224,6 @@ class XmippProtMonoRes(ProtRefine3D):
     def createOutputStep(self):
         volume_path = self._getExtraPath('MGresolution.vol')
         
-         
         volumesSet = self._createSetOfVolumes()
         volumesSet.setSamplingRate(self.inputVolume.get().getSamplingRate())
                  

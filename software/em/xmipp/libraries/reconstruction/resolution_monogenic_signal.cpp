@@ -25,7 +25,7 @@
  ***************************************************************************/
 
 #include "resolution_monogenic_signal.h"
-#define DEBUG
+//#define DEBUG
 
 void ProgMonogenicSignalRes::readParams()
 {
@@ -85,17 +85,15 @@ void ProgMonogenicSignalRes::produceSideInfo()
 		Image<double> V1, V2;
 		V1.read(fnVol);
 		V2.read(fnVol2);
-		V()=0.5*(V1()+V2());
+		V()=V1();
+		//V()=0.5*(V1()+V2());
 		halfMapsGiven = true;
-		V.write("AverageVolume.vol");
+		//V.write("AverageVolume.vol");
 	}
 	else{
 	    V.read(fnVol);
 	    halfMapsGiven = false;
 	}
-	
-	
-
 	V().setXmippOrigin();
 
 	FourierTransformer transformer;
@@ -180,7 +178,7 @@ void ProgMonogenicSignalRes::produceSideInfo()
 	}
 	
 	#ifdef DEBUG
-	mask.write("mascara.vol");
+	mask.write("mask.vol");
 	#endif
 	 ///////////////////////
 
@@ -196,6 +194,9 @@ void ProgMonogenicSignalRes::produceSideInfo()
 		fftN=new MultidimArray< std::complex<double> >;
 		FourierTransformer transformer2;
 		MultidimArray<double> &inputVol = V1();
+		#ifdef DEBUG
+		  V1.write("diff_volume.vol");
+		#endif
 		transformer2.FourierTransform(inputVol, *fftN);
 		//halfMapsGiven = true;
 	}
@@ -204,13 +205,15 @@ void ProgMonogenicSignalRes::produceSideInfo()
 		fftN=&fftV;
 		//halfMapsGiven = false;
 	}
+	
+	
 	V.clear();
 	pMask_int.clear();
 }
 
 
 void ProgMonogenicSignalRes::amplitudeMonogenicSignal3D(MultidimArray< std::complex<double> > &myfftV,
-		double w1, MultidimArray<double> &amplitude, int count)
+		double w1, MultidimArray<double> &amplitude, int count, FileName fnDebug)
 {
 	fftVRiesz.initZeros(myfftV);
 	amplitude.resizeNoCopy(VRiesz);
@@ -236,15 +239,17 @@ void ProgMonogenicSignalRes::amplitudeMonogenicSignal3D(MultidimArray< std::comp
 	if (fnSpatial!="")
 		Vfiltered()=VRiesz;
 
-	if (verbose>=2)
-	{
-		Image<double> saveImg2;
-		saveImg2() = VRiesz;
-		FileName fnSaveImg0;
-		fnSaveImg0 = formatString("filteredVolume_%i.vol", count);
-		saveImg2.write(fnSaveImg0);
-		saveImg2.clear();
-	}
+	#ifdef DEBUG
+	FileName iternumber;
+	iternumber = formatString("_Volume_%i.vol", count);
+	Image<double> saveImg2;
+	saveImg2() = VRiesz;
+	  if (fnDebug.c_str() != "")
+	  {
+		saveImg2.write(fnDebug+iternumber);
+	  }
+	saveImg2.clear(); 
+	#endif
 
 
 	FOR_ALL_DIRECT_ELEMENTS_IN_MULTIDIMARRAY(amplitude)
@@ -318,46 +323,35 @@ void ProgMonogenicSignalRes::amplitudeMonogenicSignal3D(MultidimArray< std::comp
 		DIRECT_MULTIDIM_ELEM(amplitude,n)+=DIRECT_MULTIDIM_ELEM(VRiesz,n)*DIRECT_MULTIDIM_ELEM(VRiesz,n);
 		DIRECT_MULTIDIM_ELEM(amplitude,n)=sqrt(DIRECT_MULTIDIM_ELEM(amplitude,n));
 	}
-
-	if (verbose>=2)
+	#ifdef DEBUG
+	if (fnDebug.c_str() != "")
 	{
 	Image<double> saveImg;
 	saveImg = amplitude;
-	FileName fnSaveImg;
-	fnSaveImg = formatString("amplitudeMS_%i.vol", count);
-	saveImg.write(fnSaveImg);
+	iternumber = formatString("_Amplitude_%i.vol", count);
+	saveImg.write(fnDebug+iternumber);
 	saveImg.clear();
-	if (halfMapsGiven)
-	{
-	    Image<double> saveImg;
-	    saveImg = amplitude;
-	    	FileName fnSaveImg;
-		fnSaveImg = formatString("amplitudeMS_%i_HMs.vol", count);
-		saveImg.write(fnSaveImg);
-		saveImg.clear();
 	}
-	}
+	#endif DEBUG
 
 	// Low pass filter the monogenic amplitude
 	lowPassFilter.w1 = w1;
 	amplitude.setXmippOrigin();
 	lowPassFilter.applyMaskSpace(amplitude);
 
-	if (verbose>=2)
-	{
-	Image<double> saveImg2;
+	#ifdef DEBUG
+	//Image<double> saveImg2;
 	saveImg2 = amplitude;
 	FileName fnSaveImg2;
-	fnSaveImg2 = formatString("amplitudeMfiltered_%i.vol", count);
-	saveImg2.write(fnSaveImg2);
-	saveImg2.clear();
-//	char c;
-//
-//	std::cout << "Press any key ";
-//	std::cin >> c;
+	if (fnDebug.c_str() != "")
+	{
+		iternumber = formatString("_Filtered_Amplitude_%i.vol", count);
+		saveImg2.write(fnDebug+iternumber);
 	}
-
+	saveImg2.clear(); 
+	#endif DEBUG
 }
+
 
 void ProgMonogenicSignalRes::run()
 {
@@ -393,6 +387,7 @@ void ProgMonogenicSignalRes::run()
 
 	std::cout << "Analyzing frequencies" << std::endl;
 	std::vector<double> noiseValues;
+	FileName fnDebug;
 	do
 	{
 		if (linearchk ==true)
@@ -409,10 +404,11 @@ void ProgMonogenicSignalRes::run()
 
 		std::cout << "Iteration " << iter << " Freq = " << freq << " Resolution = " << resolution << " (A)" << std::endl;
 
-
-		amplitudeMonogenicSignal3D(fftV, freq, amplitudeMS, iter);
+		fnDebug = "Signal";
+		amplitudeMonogenicSignal3D(fftV, freq, amplitudeMS, iter, fnDebug);
 		if (halfMapsGiven)
-			amplitudeMonogenicSignal3D(*fftN, freq, amplitudeMN, iter);
+			fnDebug = "Noise";
+			amplitudeMonogenicSignal3D(*fftN, freq, amplitudeMN, iter, fnDebug);
 
 
 		double sumS=0, sumS2=0, sumN=0, sumN2=0, NN = 0, NS = 0;
