@@ -494,6 +494,7 @@ for p in ['angular_break_symmetry',
           'angular_projection_matching',
           'angular_project_library',
           'angular_rotate',
+          'angular_tilt_pair_assignment',
 
           'classify_analyze_cluster',
           'classify_compare_classes',
