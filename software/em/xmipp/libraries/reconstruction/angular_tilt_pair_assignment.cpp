@@ -43,6 +43,7 @@
 #include "fourier_filter.h"
 #include "morphology.h"
 //#define DEBUG
+//#define DEBUG_ASSIGNMENT
 
 
 void ProgAngularTiltPairAssignment::readParams()
@@ -226,17 +227,20 @@ void ProgAngularTiltPairAssignment::run()
 
 	//Initial Parameters
 	MetaData mduntilt_exp, mdtilt_exp, md_u_assign_iter0, md_t_assign_iter0, mdproj, md_mic;
-	FileName fngallerystk, fnprojection, Untilted_filename_aux, fnuntilt_exp, fntilt_exp, fnall_md;
+	FileName fngallerystk, fnprojection, Untilted_filename_aux, fnuntilt_exp, fntilt_exp, fnall_md,
+			best_fnuntilt_exp;
 	Image<double> ImgUn_exp, ImgT_exp, Img_proj, Img_vol, imgstack;
 	MultidimArray< std::complex<double> > FImgT_exp;
 	MultidimArray<double> Multidim_exp, Multidim_proj, Multidim_vol, Improj_traslated, imgGallery_orig, imgGallery,
 							ImgUn_exp_copy, ImgUn_exp_copy2, ImgT_exp_copy;
-	double rot, tilt, rot_t, tilt_t, psi_t, shiftX, shiftY;
+	double rot, tilt, rot_t, tilt_t, psi_t, shiftX, shiftY, best_rot_u, best_tilt_u, best_psi_u,
+	best_rot_t, best_tilt_t, best_psi_t, bestSx_u, bestSy_u, bestSx_t, bestSy_t, best_corr1, best_corr2;
 	Matrix1D<double> Shiftvec(2);
 	Matrix2D<double> angles_rot_tilt, transformation_matrix, ZYZ_u, ZYZ_angles, ZYZ_t;
 	size_t len_p, len_u, len_t, idxp, Ydim, Xdim, Zdim, Ndim, mic_id_u, mic_id_t, idx_mpi;
 	double Ts = 5;
 	double maxResol = 20;
+	int best_enable;
 
 	Projection projection, tilt_proj;
 	CorrelationAux aux_corr, aux2, Auxcorr_bestshift;
@@ -244,7 +248,7 @@ void ProgAngularTiltPairAssignment::run()
 	FourierTransformer transformer_T;
 	AlignmentAux aux_u;
 	RotationalCorrelationAux aux3;
-	std::vector<std::string> Untilted_filenames, Tilted_filenames;
+	//std::vector<std::string> Untilted_filenames, Tilted_filenames;
 	std::vector< AlignmentTransforms> galleryTransform_;
 	//TODO: Comprobar el uso de len_t
 
@@ -263,8 +267,8 @@ void ProgAngularTiltPairAssignment::run()
 	//Common parameters
 	len_u = mduntilt_exp.size();
 	len_t = mdtilt_exp.size();
-	Untilted_filenames.resize(len_u);
-	Tilted_filenames.resize(len_t);
+	//Untilted_filenames.resize(len_u);
+	//Tilted_filenames.resize(len_t);
 
 	Matrix2D<double> position_u_gallery_and_psi;
 	position_u_gallery_and_psi.initZeros(14,len_u);
@@ -335,6 +339,7 @@ void ProgAngularTiltPairAssignment::run()
 	size_t objId_un, objId_t, ensure_assignment=0;
 	bool flag_disable =false;
 
+
 	FOR_ALL_OBJECTS_IN_METADATA2(mduntilt_exp, mdtilt_exp)
 	{
 		if ((idx_mpi+1)%Nprocessors==rank)
@@ -349,12 +354,12 @@ void ProgAngularTiltPairAssignment::run()
 				md_mic.getValue(MDL_ANGLE_TILT, tilt_mic, mic_id_u);
 				md_mic.getValue(MDL_ANGLE_PSI, alphaT, mic_id_u);
 			}
-			Untilted_filenames.push_back(fnuntilt_exp);
+			//Untilted_filenames.push_back(fnuntilt_exp);
 
 			ImgUn_exp.read(fnuntilt_exp);	//Reading image
 			ImgUn_exp().setXmippOrigin();
 			mdtilt_exp.getValue(MDL_IMAGE, fntilt_exp, __iter2.objId);
-			Tilted_filenames.push_back(fntilt_exp);
+			//Tilted_filenames.push_back(fntilt_exp);
 			ImgT_exp.read(fntilt_exp);	//Reading image
 			ImgT_exp().setXmippOrigin();
 			transformer_T.FourierTransform(ImgT_exp(),FImgT_exp,true);
@@ -386,6 +391,7 @@ void ProgAngularTiltPairAssignment::run()
 						}
 						else
 						{
+							flag_disable = false;
 							continue;
 						}
 					}
@@ -421,43 +427,26 @@ void ProgAngularTiltPairAssignment::run()
 						if (corr>bestcorr)
 						{
 							bestcorr = corr;
+							best_corr1 = corr1;
+							best_corr2 = corr2;
 
-							if (idx!=lastidx)
-							{
-								objId_un = mdPartial_u.addObject();
-								objId_t = mdPartial_t.addObject();
-								lastidx = idx;
-							}
+							best_rot_u = MAT_ELEM(angles_rot_tilt, j, 0);
+							best_tilt_u = MAT_ELEM(angles_rot_tilt, j, 1);
+							best_psi_u = psi;
 
-							mdPartial_u.setValue(MDL_IMAGE, fnuntilt_exp, objId_un);
-							mdPartial_u.setValue(MDL_PARTICLE_ID, idx+1, objId_un);
-							mdPartial_u.setValue(MDL_ANGLE_ROT, MAT_ELEM(angles_rot_tilt, j, 0), objId_un);
-							mdPartial_u.setValue(MDL_ANGLE_TILT, MAT_ELEM(angles_rot_tilt, j, 1), objId_un);
-							mdPartial_u.setValue(MDL_ANGLE_PSI, psi, objId_un);
-							mdPartial_u.setValue(MDL_MAXCC, corr1, objId_un);
-							mdPartial_u.setValue(MDL_SHIFT_X, -MAT_ELEM(transformation_matrix,0,2), objId_un);
-							mdPartial_u.setValue(MDL_SHIFT_Y, -MAT_ELEM(transformation_matrix,1,2), objId_un);
-							if (flag_disable == true)
-								mdPartial_u.setValue(MDL_ENABLED, 0, objId_un);
+							best_rot_t = rot_t;
+							best_tilt_t = tilt_t;
+							best_psi_t = psi_t;
+
+							bestSx_u = -MAT_ELEM(transformation_matrix,0,2);
+							bestSy_u = -MAT_ELEM(transformation_matrix,1,2);
+							bestSx_t = -VEC_ELEM(Shiftvec,0);
+							bestSy_t = -VEC_ELEM(Shiftvec,1);
+
+							if (flag_disable)
+								best_enable = 0;
 							else
-								mdPartial_u.setValue(MDL_ENABLED, 1, objId_un);
-
-//							objId_t = mdPartial_t.addObject();
-							mdPartial_t.setValue(MDL_IMAGE, fntilt_exp, objId_t);
-							mdPartial_t.setValue(MDL_PARTICLE_ID, idx+1, objId_t);
-							mdPartial_t.setValue(MDL_ANGLE_ROT, rot_t, objId_t);
-							mdPartial_t.setValue(MDL_ANGLE_TILT, tilt_t, objId_t);
-							mdPartial_t.setValue(MDL_ANGLE_PSI, psi_t, objId_t);
-							mdPartial_t.setValue(MDL_MAXCC, corr2, objId_t);
-							mdPartial_t.setValue(MDL_SHIFT_X, -VEC_ELEM(Shiftvec,0), objId_t);
-							mdPartial_t.setValue(MDL_SHIFT_Y, -VEC_ELEM(Shiftvec,1), objId_t);
-							if (flag_disable == true)
-								mdPartial_t.setValue(MDL_ENABLED, 0, objId_un);
-							else
-								mdPartial_t.setValue(MDL_ENABLED, 1, objId_un);
-
-							flag_disable = false;
-
+								best_enable = 1;
 
 							#ifdef DEBUG
 												//UNTILTED PARTICLE
@@ -475,7 +464,7 @@ void ProgAngularTiltPairAssignment::run()
 													FileName fn_PPPuntilted_rotated = formatString("PPPuntilted_rotated%i.xmp", (int) rank);
 													save.write(fn_PPPuntilted_rotated);   //Experimental particle rotated
 
-												//TILTED PARTICLE
+													//TILTED PARTICLE
 													save()=ImgT_exp();
 													FileName fn_PPPtilted = formatString("PPPtilted%i.xmp", (int) rank);
 													save.write(fn_PPPtilted);    //Experimental tilted image
@@ -488,31 +477,62 @@ void ProgAngularTiltPairAssignment::run()
 													FileName fn_PPPprojection_tilted = formatString("PPPprojection_tilted%i.xmp", (int) rank);
 													save.write(fn_PPPprojection_tilted);  //Galeria después del align
 
+							#endif
+#ifdef DEBUG_ASSIGNMENT
 //													std::cout << "Corr1 =" << VEC_ELEM(corr_vec, kk) << std::endl;
 //													std::cout << "Corr2 =" << corr2 << std::endl;
 													std::cout << "Corr  =" << corr << std::endl;
 													std::cout << "                          " << std::endl;
 
-													std::cout << "Untilted ROT_u = " << MAT_ELEM(angles_rot_tilt, kk, 0) << std::endl;
-													std::cout << "Untilted TILT_u = " << MAT_ELEM(angles_rot_tilt, kk, 1) << std::endl;
-													std::cout << "Untilted PSI_u = " << VEC_ELEM(psi_aux, kk) << std::endl;
+													std::cout << "Untilted ROT_u = " << MAT_ELEM(angles_rot_tilt, j, 0) << std::endl;
+													std::cout << "Untilted TILT_u = " << MAT_ELEM(angles_rot_tilt, j, 1) << std::endl;
+													std::cout << "Untilted PSI_u = " << psi << std::endl;
 													std::cout << "Tilted ROT_t = " << rot_t << std::endl;
 													std::cout << "Tilted TILT_t = " << tilt_t << std::endl;
 													std::cout << "Tilted PSI_t = " << psi_t << std::endl;
 
 													std::cout << "                          " << std::endl;
 													std::cout << "--------------------------" << std::endl;
-													std::cout << "Press any key" << std::endl;
-													char c;
-													c = getchar();
-							#endif
+//													std::cout << "Press any key" << std::endl;
+//													char c;
+//													c = getchar();
+#endif
 					}
 				}
+
+				//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+				objId_un = mdPartial_u.addObject();
+				objId_t = mdPartial_t.addObject();
+
+				mdPartial_u.setValue(MDL_IMAGE, fnuntilt_exp, objId_un);
+				mdPartial_u.setValue(MDL_PARTICLE_ID, idx+1, objId_un);
+				mdPartial_u.setValue(MDL_ANGLE_ROT, best_rot_u, objId_un);
+				mdPartial_u.setValue(MDL_ANGLE_TILT, best_tilt_u, objId_un);
+				mdPartial_u.setValue(MDL_ANGLE_PSI, best_psi_u, objId_un);
+				mdPartial_u.setValue(MDL_MAXCC, best_corr1, objId_un);
+				mdPartial_u.setValue(MDL_SHIFT_X, bestSx_u, objId_un);
+				mdPartial_u.setValue(MDL_SHIFT_Y, bestSy_u, objId_un);
+				mdPartial_u.setValue(MDL_ENABLED, best_enable, objId_un);
+
+				//objId_t = mdPartial_t.addObject();
+				mdPartial_t.setValue(MDL_IMAGE, fntilt_exp, objId_t);
+				mdPartial_t.setValue(MDL_PARTICLE_ID, idx+1, objId_t);
+				mdPartial_t.setValue(MDL_ANGLE_ROT, best_rot_t, objId_t);
+				mdPartial_t.setValue(MDL_ANGLE_TILT, best_tilt_t, objId_t);
+				mdPartial_t.setValue(MDL_ANGLE_PSI, best_psi_t, objId_t);
+				mdPartial_t.setValue(MDL_MAXCC, best_corr2, objId_t);
+				mdPartial_t.setValue(MDL_SHIFT_X, bestSx_t, objId_t);
+				mdPartial_t.setValue(MDL_SHIFT_Y, bestSy_t, objId_t);
+				mdPartial_t.setValue(MDL_ENABLED, best_enable, objId_un);
+				flag_disable = false;
+				//%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		}
 		idx++;
 		idx_mpi++;
 	}
 
+		std::cout << "writting partial metadatas" << std::endl;
 		FileName fn_upartialmd = formatString("particles@%s/Partial_u_angular_assignment%i.xmd", fnDir.c_str(), (int) rank);
 		FileName fn_tpartialmd = formatString("particles@%s/Partial_t_angular_assignment%i.xmd", fnDir.c_str(), (int) rank);
 		mdPartial_u.write(fn_upartialmd);
@@ -530,6 +550,7 @@ void ProgAngularTiltPairAssignment::run()
 			std::cerr << "Time employed = " << seconds << std::endl;
 		MetaData mdu_all, mdt_all, mdu_aux, mdt_aux;
 
+		std::cout << "joining metadatas" << std::endl;
 		if (rank ==0 )
 		{
 			fn_upartialmd = formatString("particles@%s/Partial_u_angular_assignment%i.xmd", fnDir.c_str(), 0);
