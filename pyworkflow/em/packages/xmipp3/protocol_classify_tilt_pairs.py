@@ -118,8 +118,8 @@ class XmippProtClassifyTiltPairs(XmippProtParticlePickingPairs):
             if self.TwoVolumes.get() is False:
                 stepIdTV  = self._insertFunctionStep('angularTiltAssignmentStep', 1, 0, prerequisites=[convertId])
                 stepIdTV2 = self._insertFunctionStep('InitialVolumesStep', prerequisites=[stepIdTV])
-                stepIdTV3 = self._insertFunctionStep('medianFilterStep', 1, 0, prerequisites=[stepIdTV2])
-                stepIdTV4 = self._insertFunctionStep('medianFilterStep', 2, 0, prerequisites=[stepIdTV3])
+#                 stepIdTV3 = self._insertFunctionStep('medianFilterStep', 1, 0, prerequisites=[stepIdTV2])
+#                 stepIdTV4 = self._insertFunctionStep('medianFilterStep', 2, 0, prerequisites=[stepIdTV3])
 #             else:
 #                 stepId  = self._insertFunctionStep('angularTiltAssignmentStep', 1,prerequisites=[convertId])
 #                 stepId2 = self._insertFunctionStep('angularTiltAssignmentStep', 2,prerequisites=[stepId])
@@ -131,8 +131,8 @@ class XmippProtClassifyTiltPairs(XmippProtParticlePickingPairs):
             stepId3 = self._insertFunctionStep('classifyStep', iterNum+1, prerequisites=[stepId2])
             stepId4 = self._insertFunctionStep('reconstructFourierStep', 1, iterNum+1, prerequisites=[stepId3])
             stepId5 = self._insertFunctionStep('reconstructFourierStep', 2, iterNum+1, prerequisites=[stepId4])
-            stepId6 = self._insertFunctionStep('medianFilterStep', 1, iterNum+1, prerequisites=[stepId5])
-            stepId7 = self._insertFunctionStep('medianFilterStep', 2, iterNum+1, prerequisites=[stepId6])
+#             stepId6 = self._insertFunctionStep('medianFilterStep', 1, iterNum+1, prerequisites=[stepId5])
+#             stepId7 = self._insertFunctionStep('medianFilterStep', 2, iterNum+1, prerequisites=[stepId6])
             
 
         self._insertFunctionStep('createOutputStep', prerequisites=[stepId7])
