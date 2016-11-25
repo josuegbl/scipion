@@ -159,7 +159,6 @@ class XmippProtClassifyTiltPairs(XmippProtParticlePickingPairs):
                 #print micId
                 angles = sangles[micId]
                 (angleY, angleY2, angleTilt) = angles.getAngles()
-                print angleY
                 objId_angles = md_angle.addObject()
                 md_angle.setValue(MDL_ANGLE_Y, float(angleY), objId_angles)
                 md_angle.setValue(MDL_ANGLE_Y2, float(angleY2), objId_angles)
@@ -322,8 +321,6 @@ class XmippProtClassifyTiltPairs(XmippProtParticlePickingPairs):
         
     
     def angularTiltAssignmentStep(self, volume2assign, iterNum):
-        print iterNum
-        print volume2assign
         if iterNum == 0:
             if self.inputVolume.get() is True:
                 if self.TwoVolumes.get() is False:
